@@ -32,7 +32,11 @@ class CyCameraService {
     // Вместо XhrRequestHandler используем прямые коллбэки
     final onSearchResult = (String response) {
       try {
+        print('Получен ответ от сервера: $response');
+        
         final Map<String, dynamic> jsonData = json.decode(response);
+        print('Декодированный JSON: $jsonData');
+        
         final searchResponse = CyCameraSearchResponse.fromJson(jsonData);
         
         if (!completer.isCompleted) {
@@ -85,14 +89,18 @@ class CyCameraService {
       ),
     );
     
-    // Добавляем WebView в overlay
-    try {
-      overlay.insert(overlayEntry);
-      print('WebView добавлен в Overlay');
-    } catch (e) {
-      print('Ошибка при добавлении WebView в Overlay: $e');
-      return null;
-    }
+    // Добавляем WebView в overlay с использованием WidgetsBinding.addPostFrameCallback
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        overlay.insert(overlayEntry);
+        print('WebView добавлен в Overlay');
+      } catch (e) {
+        print('Ошибка при добавлении WebView в Overlay: $e');
+        if (!completer.isCompleted) {
+          completer.complete(null);
+        }
+      }
+    });
     
     // Устанавливаем таймаут для удаления WebView
     Timer(Duration(seconds: 60), () {

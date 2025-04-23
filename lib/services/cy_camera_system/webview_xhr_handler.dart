@@ -3,6 +3,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:traffic_fines/models/car.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 /// WebView с поддержкой перехвата XHR запросов
 class WebViewWithXhrHandler extends StatefulWidget {
@@ -164,13 +165,20 @@ class _WebViewWithXhrHandlerState extends State<WebViewWithXhrHandler> {
   Future<void> _attachXHRMonitor() async {
     if (!mounted || !_isWebViewInitialized) return;
     
-    // JavaScript для перехвата XHR запросов
+    // JavaScript для перехвата XHR запросов и Fetch API
     const String xhrMonitorJs = '''
     (function() {
+      // Сохраняем оригинальные функции
       var originalXHR = window.XMLHttpRequest;
+      var originalFetch = window.fetch;
       
       // Создаем глобальную переменную для хранения запросов
       window.xhrRequests = [];
+      
+      // Генератор ID для запросов
+      function generateRequestId() {
+        return window.xhrRequests.length;
+      }
       
       // Переопределяем XMLHttpRequest
       window.XMLHttpRequest = function() {
@@ -188,11 +196,14 @@ class _WebViewWithXhrHandlerState extends State<WebViewWithXhrHandler> {
             method: method,
             url: url,
             time: new Date().toISOString(),
-            completed: false
+            completed: false,
+            type: 'xhr'
           };
-          var requestId = window.xhrRequests.length;
+          var requestId = generateRequestId();
           window.xhrRequests.push(requestInfo);
           xhr._requestId = requestId;
+          
+          console.log('XHR Open:', method, url);
           
           // Вызываем оригинальный метод
           return originalOpen.apply(xhr, arguments);
@@ -213,7 +224,7 @@ class _WebViewWithXhrHandlerState extends State<WebViewWithXhrHandler> {
               request.response = xhr.responseText;
               
               // Также выводим в консоль для отладки
-              console.log('XHR completed:', JSON.stringify(request));
+              console.log('XHR completed:', request.url, request.status);
             }
           });
           
@@ -222,6 +233,48 @@ class _WebViewWithXhrHandlerState extends State<WebViewWithXhrHandler> {
         };
         
         return xhr;
+      };
+      
+      // Переопределяем Fetch API
+      window.fetch = function(input, init) {
+        var method = (init && init.method) ? init.method : 'GET';
+        var url = input;
+        
+        if (typeof input === 'object' && input.url) {
+          url = input.url;
+        }
+        
+        // Сохраняем информацию о запросе
+        var requestInfo = {
+          method: method,
+          url: url.toString(),
+          time: new Date().toISOString(),
+          completed: false,
+          type: 'fetch'
+        };
+        var requestId = generateRequestId();
+        window.xhrRequests.push(requestInfo);
+        
+        console.log('Fetch:', method, url);
+        
+        // Вызываем оригинальный fetch
+        return originalFetch.apply(window, arguments)
+          .then(function(response) {
+            // Клонируем ответ
+            var clonedResponse = response.clone();
+            
+            // Читаем тело как текст
+            clonedResponse.text().then(function(text) {
+              var request = window.xhrRequests[requestId];
+              request.completed = true;
+              request.status = response.status;
+              request.response = text;
+              
+              console.log('Fetch completed:', request.url, request.status);
+            });
+            
+            return response;
+          });
       };
       
       // Функция для получения всех запросов
@@ -235,7 +288,10 @@ class _WebViewWithXhrHandlerState extends State<WebViewWithXhrHandler> {
         return true;
       };
       
-      return "XHR monitoring initialized";
+      // Дополнительная отладка
+      console.log("XHR и Fetch мониторинг активирован");
+      
+      return "XHR and Fetch monitoring initialized";
     })();
     ''';
     
@@ -265,7 +321,6 @@ class _WebViewWithXhrHandlerState extends State<WebViewWithXhrHandler> {
     
     try {
       final result = await _controller.runJavaScriptReturningResult("window.getXHRRequests()");
-      
       if (result != null && result.toString() != "null" && result.toString().length > 2) {
         String jsonStr = result.toString();
         if (jsonStr.startsWith('"') && jsonStr.endsWith('"')) {
@@ -273,11 +328,12 @@ class _WebViewWithXhrHandlerState extends State<WebViewWithXhrHandler> {
               .replaceAll('\\"', '"')
               .replaceAll('\\\\', '\\');
         }
-        
+
         if (!mounted) return;
         
         try {
           final List<dynamic> requests = json.decode(jsonStr);
+          print('Найдено ${requests.length} XHR запросов');
           
           // Обрабатываем запросы
           for (var request in requests) {
@@ -285,27 +341,51 @@ class _WebViewWithXhrHandlerState extends State<WebViewWithXhrHandler> {
             
             if (request is Map<String, dynamic>) {
               String url = request['url']?.toString() ?? '';
+              bool completed = request['completed'] == true;
               
-              if (url.contains('Search/Search')) {
+              print('XHR запрос: ${request['method']} $url (завершен: $completed)');
+              if (completed) {
+                print('Статус: ${request['status']}');
+              }
+              
+              // Проверяем любые URL, содержащие "Search" - возможно формат поиска изменился
+              if (url == 'Search/Search' && completed) {
+                print('Найден потенциальный запрос поиска: $url');
                 String response = request['response']?.toString() ?? '';
                 if (response.isNotEmpty) {
-                  // Передаем ответ обработчику
-                  if (mounted) {
-                    widget.onSearchResult(response);
+                  print('Получен ответ на поисковый запрос (длина: ${response.length})');
+                  
+                  // Пробуем выводить начало ответа
+                  if (response.length > 10) {
+                    print('Начало ответа: ${response.substring(0, math.min(100, response.length))}...');
                   }
                   
-                  // Очищаем историю запросов
-                  if (mounted && _isWebViewInitialized) {
-                    try {
-                      await _controller.runJavaScript("window.clearXHRRequests()");
-                    } catch (e) {
-                      print('Ошибка при очистке XHR запросов: $e');
+                  // Проверяем, является ли ответ валидным JSON
+                  try {
+                    Map<String, dynamic> jsonResponse = json.decode(response);
+                    print('Ответ успешно декодирован как JSON');
+                    
+                    // Передаем ответ обработчику
+                    if (mounted) {
+                      print('Вызываем onSearchResult с ответом');
+                      widget.onSearchResult(response);
                     }
+                    
+                    // Очищаем историю запросов
+                    if (mounted && _isWebViewInitialized) {
+                      try {
+                        await _controller.runJavaScript("window.clearXHRRequests()");
+                      } catch (e) {
+                        print('Ошибка при очистке XHR запросов: $e');
+                      }
+                    }
+                    
+                    // Останавливаем таймер, т.к. мы уже получили результат
+                    _xhrFetchTimer?.cancel();
+                    return;
+                  } catch (e) {
+                    print('Ответ не является валидным JSON: $e');
                   }
-                  
-                  // Останавливаем таймер, т.к. мы уже получили результат
-                  _xhrFetchTimer?.cancel();
-                  return;
                 }
               }
             }
