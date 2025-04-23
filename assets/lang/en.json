@@ -1,0 +1,20 @@
+{
+  "title": "Traffic Fines",
+  "vehicles": "Vehicles",
+  "add_vehicle": "Add Vehicle",
+  "check": "Check",
+  "no_vehicles": "No vehicles added yet.",
+  "check_result": "Check Result",
+  "no_fines": "No fines found.",
+  "change_language": "Change Language",
+  "settings": "Settings",
+  "select_language": "Select Language",
+  "app_settings": "Application Settings",
+  "notifications": "Notifications",
+  "notifications_description": "Enable push notifications",
+  "dark_mode": "Dark Mode",
+  "dark_mode_description": "Enable dark theme for the app",
+  "about_app": "About Application",
+  "app_version": "Version",
+  "app_description": "Application for checking traffic fines in Cyprus"
+} 

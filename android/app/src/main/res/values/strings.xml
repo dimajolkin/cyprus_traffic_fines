@@ -1,0 +1,4 @@
+<resources>
+        <string name="app_name">Traffic Fines</string>
+        <!-- ... остальные строки ... -->
+    </resources>
