@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:traffic_fines/models/car.dart';
 import 'package:traffic_fines/services/cy_camera_system/models.dart';
 import 'package:traffic_fines/services/cy_camera_system/webview_xhr_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -10,21 +11,30 @@ class CyCameraService {
   static const String baseUrl = 'https://cycamerasystem.com.cy';
   static const String searchEndpoint = '$baseUrl/?handler=Search';
   
-  // Флаг отладки
-  static bool debugMode = false;
+  // Ключ для доступа к настройке отладки
+  static const String debugModeKey = 'cy_camera_debug_mode';
+  
+  // Флаг отладки через геттер
+  static Future<bool> get debugMode async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(debugModeKey) ?? false;
+  }
+  
+  // Метод для изменения режима отладки
+  static Future<void> setDebugMode(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(debugModeKey, value);
+  }
 
   /// Скрытый WebView для поиска штрафов
   Future<CyCameraSearchResponse?> searchWithWebView(BuildContext context, {
     required Car car, 
-    bool debug = false
+    bool? debug = null
   }) async {
     print('Начало поиска штрафов для авто: ${car.carNumber}');
     
-    // Устанавливаем временный статус отладки, если передан
-    final previousDebugMode = debugMode;
-    if (debug) {
-      debugMode = true;
-    }
+    // Получаем статус отладки из настроек
+    final isDebugMode = debug ?? await debugMode;
     
     // Создаем Completer для ожидания результатов
     final Completer<CyCameraSearchResponse?> completer = Completer<CyCameraSearchResponse?>();
@@ -78,21 +88,23 @@ class CyCameraService {
     // Создаем OverlayEntry с WebView
     overlayEntry = OverlayEntry(
       builder: (context) => Positioned(
-        right: debugMode ? 0 : 0, 
-        bottom: debugMode ? 60 : 0,
-        width: debugMode ? MediaQuery.of(context).size.width : 1,
-        height: debugMode ? MediaQuery.of(context).size.height / 2 : 1,
+        right: isDebugMode ? 0 : 0, 
+        bottom: isDebugMode ? 0 : 0,
+        top: isDebugMode ? 0 : null,
+        left: isDebugMode ? 0 : null,
+        width: isDebugMode ? null : 1,
+        height: isDebugMode ? null : 1,
         child: Opacity(
-          opacity: debugMode ? 1.0 : 0.01, // Непрозрачное для отладки
+          opacity: isDebugMode ? 1.0 : 0.01, // Непрозрачное для отладки
           child: Material(
-            elevation: debugMode ? 8.0 : 0.0,
+            elevation: isDebugMode ? 8.0 : 0.0,
             child: Container(
               decoration: BoxDecoration(
-                border: debugMode ? Border.all(color: Colors.red, width: 2.0) : null,
+                border: isDebugMode ? Border.all(color: Colors.red, width: 2.0) : null,
               ),
               child: Column(
                 children: [
-                  if (debugMode)
+                  if (isDebugMode)
                     Container(
                       color: Colors.red,
                       padding: const EdgeInsets.all(8.0),
@@ -121,7 +133,7 @@ class CyCameraService {
                       car: car,
                       onSearchResult: onSearchResult,
                       onError: onError,
-                      debug: debugMode,
+                      debug: isDebugMode,
                     ),
                   ),
                 ],
@@ -157,9 +169,6 @@ class CyCameraService {
           print('Ошибка при удалении WebView: $e');
         }
       }
-      
-      // Восстанавливаем предыдущее значение debug режима
-      debugMode = previousDebugMode;
     });
     
     // Возвращаем будущий результат

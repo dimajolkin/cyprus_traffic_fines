@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/translator.dart';
+import '../services/cy_camera_system/cy_camera_service.dart';
 import 'database_viewer.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -14,6 +15,29 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _notificationsEnabled = true;
   bool _darkModeEnabled = false;
+  bool _debugModeEnabled = false;
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadDebugMode();
+  }
+  
+  /// Загружает состояние режима отладки из настроек
+  Future<void> _loadDebugMode() async {
+    final isDebugMode = await CyCameraService.debugMode;
+    setState(() {
+      _debugModeEnabled = isDebugMode;
+    });
+  }
+  
+  /// Сохраняет состояние режима отладки в настройки
+  Future<void> _saveDebugMode(bool value) async {
+    await CyCameraService.setDebugMode(value);
+    setState(() {
+      _debugModeEnabled = value;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -92,18 +116,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             SizedBox(height: 16),
             Card(
-              child: ListTile(
-                leading: Icon(Icons.storage),
-                title: Text("Просмотр базы данных"),
-                subtitle: Text("Просмотр содержимого базы данных приложения"),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => DatabaseViewerScreen(translator: widget.translator),
-                    ),
-                  );
-                },
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    title: Text("Режим отладки WebView"),
+                    subtitle: Text("Показывать WebView при поиске штрафов"),
+                    value: _debugModeEnabled,
+                    secondary: Icon(Icons.bug_report),
+                    onChanged: (value) {
+                      _saveDebugMode(value);
+                    },
+                  ),
+                  Divider(),
+                  ListTile(
+                    leading: Icon(Icons.storage),
+                    title: Text("Просмотр базы данных"),
+                    subtitle: Text("Просмотр содержимого базы данных приложения"),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => DatabaseViewerScreen(translator: widget.translator),
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ),
             ),
           ],
