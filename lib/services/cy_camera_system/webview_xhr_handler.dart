@@ -21,7 +21,7 @@ class WebViewWithXhrHandler extends StatefulWidget {
 }
 
 class _WebViewWithXhrHandlerState extends State<WebViewWithXhrHandler> {
-  late WebViewController _controller;
+  late final WebViewController _controller;
   bool _isWebViewInitialized = false;
   Timer? _xhrFetchTimer;
   
@@ -42,31 +42,31 @@ class _WebViewWithXhrHandlerState extends State<WebViewWithXhrHandler> {
   }
   
   Future<void> _initController() async {
-    final controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageFinished: (String url) {
-            print('WebView загрузил страницу: $url');
-            _fillFormAndSearch();
-          },
-        ),
-      );
+    try {
+      // Создаем контроллер через новый API
+      _controller = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setNavigationDelegate(
+          NavigationDelegate(
+            onPageFinished: (String url) {
+              print('WebView загрузил страницу: $url');
+              if (mounted) {
+                _fillFormAndSearch();
+              }
+            },
+          ),
+        );
       
-    // Сохраняем контроллер для дальнейшего использования
-    _controller = controller;
-    
-    // Загружаем страницу после инициализации
-    if (mounted) {
-      try {
+      // Загружаем страницу после инициализации
+      if (mounted) {
         await _controller.loadRequest(Uri.parse(searchEndpoint));
         _isWebViewInitialized = true;
         print('WebView создан с ключом: $_webViewKey');
-      } catch (e) {
-        print('Ошибка при загрузке страницы: $e');
-        if (mounted) {
-          widget.onError('Ошибка при инициализации WebView: $e');
-        }
+      }
+    } catch (e) {
+      print('Ошибка при инициализации WebView: $e');
+      if (mounted) {
+        widget.onError('Ошибка при инициализации WebView: $e');
       }
     }
   }

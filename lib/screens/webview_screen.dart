@@ -1,119 +1,164 @@
 import 'package:flutter/material.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 import '../models/car.dart';
-import '../repositories/identification_method_repository.dart';
+import '../services/cy_camera_system/cy_camera_service.dart';
+import '../services/cy_camera_system/models.dart';
 import 'dart:async';
 
-class WebViewScreen extends StatelessWidget {
+class WebViewScreen extends StatefulWidget {
   final Car car;
-  late WebViewController _webViewController;
-  bool _isWebViewControllerInitialized = false; // Track initialization
-  final IdentificationMethodRepository _methodRepository = IdentificationMethodRepository();
 
   WebViewScreen({required this.car});
+
+  @override
+  _WebViewScreenState createState() => _WebViewScreenState();
+}
+
+class _WebViewScreenState extends State<WebViewScreen> {
+  final CyCameraService _cyCameraService = CyCameraService();
+  bool _isLoading = false;
+  CyCameraSearchResponse? _searchResponse;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    // Запуск поиска при открытии экрана
+    _searchViolations();
+  }
+
+  // Метод для поиска штрафов
+  Future<void> _searchViolations() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final response = await _cyCameraService.searchWithWebView(
+        context,
+        car: widget.car,
+      );
+
+      setState(() {
+        _isLoading = false;
+        _searchResponse = response;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Ошибка при поиске штрафов: $e';
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('WebView for Car: ${car.carNumber}'),
+        title: Text('Проверка штрафов: ${widget.car.carNumber}'),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.refresh),
+            onPressed: _isLoading ? null : _searchViolations,
+          ),
+        ],
       ),
-      body: WebView(
-        initialUrl: 'https://cycamerasystem.com.cy/?handler=Search',
-        javascriptMode: JavascriptMode.unrestricted,
-        onPageFinished: (String url) async {
-          print('Page finished loading: \\${url}');
-          if (_isWebViewControllerInitialized) {
-            bool formExist = await waitForm('searchForm', 10);
-            if (!formExist) {
-              print('Form not found.');
-              return;
-            }
-
-            // Используем ID напрямую, т.к. они уже соответствуют форме
-            await setValue('searchIdType', car.idType);
-            await setValue('searchIdValue', car.idNumber);
-            await setValue('searchPlate', car.carNumber);
-            await waitSec(1);
-            await click('btnSearch');
-          } else {
-            print('WebViewController not initialized yet.');
-          }
-        },
-        onWebViewCreated: (WebViewController webViewController) async {
-          _webViewController = webViewController;
-          _isWebViewControllerInitialized = true; // Mark as initialized
-          final cookieManager = CookieManager();
-          await cookieManager.setCookie(
-            WebViewCookie(
-              name: 'UserLanguage',
-              value: 'en-US',
-              domain: 'cycamerasystem.com.cy',
-            ),
-          );
-        },
-      ),
+      body: _buildBody(),
     );
   }
 
-  Future<void> setValue(String inputName, String value) async {
-    await _webViewController.runJavascriptReturningResult(
-        "var input = document.getElementById('$inputName');" +
-            "if (input) { input.value = '$value'; true; } else { false; }"
-    );
-  }
-
-  Future<bool> waitForm(String name, int timeoutSeconds) async {
-    Completer<bool> completer = Completer<bool>();
-    int attempts = 0;
-    const int delayBetweenAttempts = 500; // в миллисекундах
-    int maxAttempts = (timeoutSeconds * 1000) ~/ delayBetweenAttempts;
-    
-    void checkFormExistence() async {
-      if (attempts >= maxAttempts) {
-        if (!completer.isCompleted) {
-          completer.complete(false);
-        }
-        return;
-      }
-      
-      attempts++;
-      if (_isWebViewControllerInitialized) {
-        try {
-          String result = await _webViewController.runJavascriptReturningResult(
-              "document.getElementById('$name') != null"
-          );
-          print('Form check result: \\${result}');
-          
-          if (result.toLowerCase() == '1') {
-            if (!completer.isCompleted) {
-              completer.complete(true);
-            }
-            return;
-          }
-        } catch (e) {
-          print('Error checking form: \\${e}');
-        }
-      }
-      
-      // Если форма не найдена, повторяем через интервал
-      Future.delayed(Duration(milliseconds: delayBetweenAttempts), checkFormExistence);
+  Widget _buildBody() {
+    if (_isLoading) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Поиск штрафов...'),
+          ],
+        ),
+      );
     }
-    
-    // Запускаем проверку
-    checkFormExistence();
-    
-    return completer.future;
-  }
 
-  Future<String> click(String inputName) async {
-    return await _webViewController.runJavascriptReturningResult(
-        "var input = document.getElementById('$inputName');" +
-        "if (input) { input.click(); true; } else { false; }"
+    if (_errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, color: Colors.red, size: 48),
+            SizedBox(height: 16),
+            Text(_errorMessage!),
+            SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _searchViolations,
+              child: Text('Попробовать снова'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_searchResponse == null) {
+      return Center(
+        child: Text('Нет данных'),
+      );
+    }
+
+    // Проверяем наличие ошибок валидации
+    if (_searchResponse!.isError || _searchResponse!.validationList.isNotEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 48),
+            SizedBox(height: 16),
+            Text('Ошибка проверки данных:'),
+            ..._searchResponse!.validationList.map((item) => 
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text('${item.field}: ${item.message}'),
+              )
+            ),
+            SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _searchViolations,
+              child: Text('Попробовать снова'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Отображаем результаты
+    if (_searchResponse!.resultsList.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.check_circle, color: Colors.green, size: 48),
+            SizedBox(height: 16),
+            Text('Штрафов не найдено'),
+          ],
+        ),
+      );
+    }
+
+    // Отображаем список штрафов
+    return ListView.builder(
+      itemCount: _searchResponse!.resultsList.length,
+      itemBuilder: (context, index) {
+        final violation = _searchResponse!.resultsList[index];
+        return Card(
+          margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: ListTile(
+            title: Text('Штраф №${violation.citationNumber}'),
+            subtitle: Text('Дата: ${violation.formattedDate}'),
+            trailing: Icon(Icons.arrow_forward_ios),
+            // TODO: добавить навигацию на детальный экран штрафа
+          ),
+        );
+      },
     );
-  }
-
-  Future<void> waitSec(int sec) async {
-    await Future.delayed(Duration(seconds: sec));
   }
 }

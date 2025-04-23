@@ -26,6 +26,9 @@ class CyCameraService {
       return null;
     }
     
+    // Создаем OverlayEntry с переменной заранее
+    late OverlayEntry overlayEntry;
+    
     // Вместо XhrRequestHandler используем прямые коллбэки
     final onSearchResult = (String response) {
       try {
@@ -59,7 +62,6 @@ class CyCameraService {
     };
     
     // Создаем OverlayEntry с WebView
-    late OverlayEntry overlayEntry;
     overlayEntry = OverlayEntry(
       builder: (context) => Positioned(
         right: 0, 
