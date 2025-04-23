@@ -9,12 +9,22 @@ import 'dart:convert';
 class CyCameraService {
   static const String baseUrl = 'https://cycamerasystem.com.cy';
   static const String searchEndpoint = '$baseUrl/?handler=Search';
+  
+  // Флаг отладки
+  static bool debugMode = false;
 
   /// Скрытый WebView для поиска штрафов
   Future<CyCameraSearchResponse?> searchWithWebView(BuildContext context, {
-    required Car car
+    required Car car, 
+    bool debug = false
   }) async {
     print('Начало поиска штрафов для авто: ${car.carNumber}');
+    
+    // Устанавливаем временный статус отладки, если передан
+    final previousDebugMode = debugMode;
+    if (debug) {
+      debugMode = true;
+    }
     
     // Создаем Completer для ожидания результатов
     final Completer<CyCameraSearchResponse?> completer = Completer<CyCameraSearchResponse?>();
@@ -68,20 +78,53 @@ class CyCameraService {
     // Создаем OverlayEntry с WebView
     overlayEntry = OverlayEntry(
       builder: (context) => Positioned(
-        right: 0, 
-        bottom: 0,
-        width: 1,
-        height: 1,
+        right: debugMode ? 0 : 0, 
+        bottom: debugMode ? 60 : 0,
+        width: debugMode ? MediaQuery.of(context).size.width : 1,
+        height: debugMode ? MediaQuery.of(context).size.height / 2 : 1,
         child: Opacity(
-          opacity: 0.01, // Почти прозрачный для отладки
-          child: SizedBox(
-            width: 1,
-            height: 1,
-            child: Material(
-              child: WebViewWithXhrHandler(
-                car: car,
-                onSearchResult: onSearchResult,
-                onError: onError,
+          opacity: debugMode ? 1.0 : 0.01, // Непрозрачное для отладки
+          child: Material(
+            elevation: debugMode ? 8.0 : 0.0,
+            child: Container(
+              decoration: BoxDecoration(
+                border: debugMode ? Border.all(color: Colors.red, width: 2.0) : null,
+              ),
+              child: Column(
+                children: [
+                  if (debugMode)
+                    Container(
+                      color: Colors.red,
+                      padding: const EdgeInsets.all(8.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('DEBUG WebView', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          IconButton(
+                            icon: Icon(Icons.close, color: Colors.white),
+                            onPressed: () {
+                              try {
+                                overlayEntry.remove();
+                                if (!completer.isCompleted) {
+                                  completer.complete(null);
+                                }
+                              } catch (e) {
+                                print('Ошибка при удалении WebView: $e');
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  Expanded(
+                    child: WebViewWithXhrHandler(
+                      car: car,
+                      onSearchResult: onSearchResult,
+                      onError: onError,
+                      debug: debugMode,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -114,6 +157,9 @@ class CyCameraService {
           print('Ошибка при удалении WebView: $e');
         }
       }
+      
+      // Восстанавливаем предыдущее значение debug режима
+      debugMode = previousDebugMode;
     });
     
     // Возвращаем будущий результат

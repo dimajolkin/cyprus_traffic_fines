@@ -10,11 +10,13 @@ class WebViewWithXhrHandler extends StatefulWidget {
   final Car car;
   final Function(String) onSearchResult;
   final Function(String) onError;
+  final bool debug;
   
   WebViewWithXhrHandler({
     required this.car,
     required this.onSearchResult,
     required this.onError,
+    this.debug = false,
   });
   
   @override
@@ -93,7 +95,54 @@ class _WebViewWithXhrHandlerState extends State<WebViewWithXhrHandler> {
   Widget build(BuildContext context) {
     print('WebViewWithXhrHandler: build');
     
-    // Используем ключ для создания уникального WebView
+    // В режиме отладки показываем дополнительную информацию 
+    if (widget.debug) {
+      return Column(
+        children: [
+          if (_isWebViewInitialized)
+            Expanded(
+              child: Stack(
+                children: [
+                  WebViewWidget(
+                    key: ValueKey('web_view_$_webViewKey'),
+                    controller: _controller,
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      color: Colors.black.withOpacity(0.7),
+                      padding: EdgeInsets.all(8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Car: ${widget.car.carNumber} (ID: ${widget.car.idType}-${widget.car.idNumber})',
+                            style: TextStyle(color: Colors.white, fontSize: 12),
+                          ),
+                          Text(
+                            'WebView ID: $_webViewKey',
+                            style: TextStyle(color: Colors.white, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Expanded(
+              child: Center(
+                child: CircularProgressIndicator(),
+              ),
+            ),
+        ],
+      );
+    }
+    
+    // Обычный режим - скрытый WebView
     return _isWebViewInitialized
         ? WebViewWidget(
             key: ValueKey('web_view_$_webViewKey'),

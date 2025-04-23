@@ -16,6 +16,7 @@ class WebViewScreen extends StatefulWidget {
 class _WebViewScreenState extends State<WebViewScreen> {
   final CyCameraService _cyCameraService = CyCameraService();
   bool _isLoading = false;
+  bool _debugMode = true; // Флаг отладочного режима
   CyCameraSearchResponse? _searchResponse;
   String? _errorMessage;
 
@@ -37,6 +38,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
       final response = await _cyCameraService.searchWithWebView(
         context,
         car: widget.car,
+        debug: _debugMode, // Передаем флаг отладки
       );
 
       setState(() {
@@ -51,12 +53,27 @@ class _WebViewScreenState extends State<WebViewScreen> {
     }
   }
 
+  // Переключение режима отладки
+  void _toggleDebugMode() {
+    setState(() {
+      _debugMode = !_debugMode;
+    });
+    // Перезапускаем поиск с новым режимом
+    _searchViolations();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text('Проверка штрафов: ${widget.car.carNumber}'),
         actions: [
+          // Кнопка для включения отладочного режима
+          IconButton(
+            icon: Icon(_debugMode ? Icons.bug_report : Icons.bug_report_outlined),
+            tooltip: 'Режим отладки',
+            onPressed: _isLoading ? null : _toggleDebugMode,
+          ),
           IconButton(
             icon: Icon(Icons.refresh),
             onPressed: _isLoading ? null : _searchViolations,
