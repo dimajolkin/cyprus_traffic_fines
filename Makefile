@@ -7,3 +7,9 @@ build:
 
 build-icon:
 	flutter pub run flutter_launcher_icons:main
+
+release:
+	flutter build ios --release
+
+install:
+	flutter install

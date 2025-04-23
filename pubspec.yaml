@@ -110,3 +110,8 @@ flutter_icons:
   android: true
   ios: true
   image_path: "assets/icon.png"
+
+# Настройки для iOS
+ios:
+  bundle_name: "MyCyprus Fines"
+  bundle_identifier: "cy.mycyprus.trafficfines"
