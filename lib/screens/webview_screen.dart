@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../models/car.dart';
 import '../services/cy_camera_system/cy_camera_service.dart';
@@ -18,12 +19,23 @@ class _WebViewScreenState extends State<WebViewScreen> {
   bool _isLoading = false;
   CyCameraSearchResponse? _searchResponse;
   String? _errorMessage;
+  bool _showRawJson = false;
 
   @override
   void initState() {
     super.initState();
+    // Загружаем состояние отладки
+    _loadDebugMode();
     // Запуск поиска при открытии экрана
     _searchViolations();
+  }
+  
+  Future<void> _loadDebugMode() async {
+    // Определяем, в режиме отладки ли приложение
+    final isDebug = await CyCameraService.debugMode;
+    setState(() {
+      _showRawJson = isDebug;
+    });
   }
 
   // Метод для поиска штрафов
@@ -105,60 +117,114 @@ class _WebViewScreenState extends State<WebViewScreen> {
       );
     }
 
-    // Проверяем наличие ошибок валидации
-    if (_searchResponse!.isError || _searchResponse!.validationList.isNotEmpty) {
-      return Center(
+    // Создаем виджет для отображения JSON в режиме отладки
+    Widget _buildDebugJsonWidget() {
+      if (!_showRawJson) return SizedBox.shrink();
+      
+      return Container(
+        width: double.infinity,
+        margin: EdgeInsets.all(16),
+        padding: EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.withOpacity(0.5)),
+        ),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 48),
-            SizedBox(height: 16),
-            Text('Ошибка проверки данных:'),
-            ..._searchResponse!.validationList.map((item) => 
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text('${item.field}: ${item.message}'),
-              )
+            Text(
+              'DEBUG: JSON Ответ',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16, 
+                color: Colors.green[800]
+              ),
             ),
-            SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _searchViolations,
-              child: Text('Попробовать снова'),
+            SizedBox(height: 8),
+            Text(
+              JsonEncoder.withIndent('  ').convert(_searchResponse!.toJson()),
+              style: TextStyle(fontFamily: 'monospace', fontSize: 12),
             ),
           ],
         ),
       );
     }
 
-    // Отображаем результаты
+    // Проверяем наличие ошибок валидации
+    if (_searchResponse!.isError || _searchResponse!.validationList.isNotEmpty) {
+      return SingleChildScrollView(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 48),
+              SizedBox(height: 16),
+              Text('Ошибка проверки данных:'),
+              ..._searchResponse!.validationList.map((item) => 
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text('${item.field}: ${item.message}'),
+                )
+              ),
+              SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: _searchViolations,
+                child: Text('Попробовать снова'),
+              ),
+              if (_showRawJson) _buildDebugJsonWidget(),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Отображаем результаты для случая без штрафов
     if (_searchResponse!.resultsList.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.check_circle, color: Colors.green, size: 48),
-            SizedBox(height: 16),
-            Text('Штрафов не найдено'),
-          ],
+      return SingleChildScrollView(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.check_circle, color: Colors.green, size: 48),
+              SizedBox(height: 16),
+              Text('Штрафов не найдено'),
+              if (_showRawJson) _buildDebugJsonWidget(),
+            ],
+          ),
         ),
       );
     }
 
     // Отображаем список штрафов
-    return ListView.builder(
-      itemCount: _searchResponse!.resultsList.length,
-      itemBuilder: (context, index) {
-        final violation = _searchResponse!.resultsList[index];
-        return Card(
-          margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: ListTile(
-            title: Text('Штраф №${violation.citationNumber}'),
-            subtitle: Text('Дата: ${violation.formattedDate}'),
-            trailing: Icon(Icons.arrow_forward_ios),
-            // TODO: добавить навигацию на детальный экран штрафа
+    return Column(
+      children: [
+        if (_showRawJson) 
+          Expanded(
+            flex: 1,
+            child: SingleChildScrollView(
+              child: _buildDebugJsonWidget(),
+            ),
           ),
-        );
-      },
+        Expanded(
+          flex: _showRawJson ? 2 : 1,
+          child: ListView.builder(
+            itemCount: _searchResponse!.resultsList.length,
+            itemBuilder: (context, index) {
+              final violation = _searchResponse!.resultsList[index];
+              return Card(
+                margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: ListTile(
+                  title: Text('Штраф №${violation.citationNumber}'),
+                  subtitle: Text('Дата: ${violation.formattedDate}'),
+                  trailing: Icon(Icons.arrow_forward_ios),
+                  // TODO: добавить навигацию на детальный экран штрафа
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
